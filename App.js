@@ -67,6 +67,43 @@ const apiCall = async (endpoint, options = {}) => {
 const showSuccess = (message) => Alert.alert('Success', message);
 const showError = (message) => Alert.alert('Error', message);
 
+// Validation helpers
+const isValidEmail = (email) => {
+  if (!email) return true; // optional in some forms
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+  return emailRegex.test(String(email).trim());
+};
+
+const isValidPhone = (phone) => {
+  if (!phone) return true; // optional in some forms
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+};
+
+const isValidPassword = (password) => String(password || '').length >= 8;
+
+const isValidAcademicYear = (text) => {
+  if (!text) return true;
+  const match = /^(\d{4})-(\d{4})$/.exec(String(text));
+  if (!match) return false;
+  const start = parseInt(match[1], 10);
+  const end = parseInt(match[2], 10);
+  return end === start + 1;
+};
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const formatDate = (y, m, d) => `${y}-${pad2(m)}-${pad2(d)}`;
+const parseDateString = (value) => {
+  try {
+    const [y, m, d] = String(value).split('-').map((v) => parseInt(v, 10));
+    if (!y || !m || !d) throw new Error('invalid');
+    return { year: y, month: m, day: d };
+  } catch {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
+  }
+};
+
 // Professional Loading Screen
 const LoadingScreen = ({ message = 'Loading...' }) => (
   <SafeAreaView style={styles.container}>
@@ -108,6 +145,10 @@ const RegistrationScreen = ({ navigation }) => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [faceImage, setFaceImage] = useState(null);
+  const [dobPickerOpen, setDobPickerOpen] = useState(false);
+  const [dobYear, setDobYear] = useState(new Date().getFullYear());
+  const [dobMonth, setDobMonth] = useState(new Date().getMonth() + 1);
+  const [dobDay, setDobDay] = useState(new Date().getDate());
 
   useEffect(() => {
     if (userType === 'student') {
@@ -136,6 +177,19 @@ const RegistrationScreen = ({ navigation }) => {
       return;
     }
 
+    if (!isValidPassword(adminData.password)) {
+      showError('Password must be at least 8 characters long');
+      return;
+    }
+    if (!isValidEmail(adminData.email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+    if (!isValidPhone(adminData.phoneNumber)) {
+      showError('Please enter a valid phone number');
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await apiCall('/auth/admin/register', {
@@ -157,6 +211,19 @@ const RegistrationScreen = ({ navigation }) => {
   const handleStudentRegistration = async () => {
     if (!studentData.studentName.trim() || !studentData.studentId.trim() || !studentData.dateOfBirth) {
       showError('Please fill all required fields');
+      return;
+    }
+
+    if (studentData.email && !isValidEmail(studentData.email)) {
+      showError('Please enter a valid student email address');
+      return;
+    }
+    if (studentData.phoneNumber && !isValidPhone(studentData.phoneNumber)) {
+      showError('Please enter a valid phone number');
+      return;
+    }
+    if (studentData.academicYear && !isValidAcademicYear(studentData.academicYear)) {
+      showError('Academic Year must be in format YYYY-YYYY (consecutive years)');
       return;
     }
 
@@ -213,6 +280,19 @@ const RegistrationScreen = ({ navigation }) => {
         ? prev.enrolledCourses.filter(code => code !== courseCode)
         : [...prev.enrolledCourses, courseCode]
     }));
+  };
+
+  const openDobPicker = () => {
+    const { year, month, day } = parseDateString(studentData.dateOfBirth);
+    setDobYear(year);
+    setDobMonth(month);
+    setDobDay(day);
+    setDobPickerOpen(true);
+  };
+
+  const confirmDobPicker = () => {
+    setStudentData({ ...studentData, dateOfBirth: formatDate(dobYear, dobMonth, dobDay) });
+    setDobPickerOpen(false);
   };
 
   return (
@@ -283,6 +363,9 @@ const RegistrationScreen = ({ navigation }) => {
                 value={adminData.password}
                 onChangeText={(text) => setAdminData({...adminData, password: text})}
               />
+              {!!adminData.password && !isValidPassword(adminData.password) && (
+                <Text style={styles.validationText}>Password must be at least 8 characters</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -295,6 +378,9 @@ const RegistrationScreen = ({ navigation }) => {
                 onChangeText={(text) => setAdminData({...adminData, email: text})}
                 autoCapitalize="none"
               />
+              {!!adminData.email && !isValidEmail(adminData.email) && (
+                <Text style={styles.validationText}>Enter a valid email address</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -306,6 +392,9 @@ const RegistrationScreen = ({ navigation }) => {
                 value={adminData.phoneNumber}
                 onChangeText={(text) => setAdminData({...adminData, phoneNumber: text})}
               />
+              {!!adminData.phoneNumber && !isValidPhone(adminData.phoneNumber) && (
+                <Text style={styles.validationText}>Enter a valid phone number</Text>
+              )}
             </View>
 
             <TouchableOpacity
@@ -347,12 +436,13 @@ const RegistrationScreen = ({ navigation }) => {
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Date of Birth *</Text>
-              <TextInput
-                style={styles.modernInput}
-                placeholder="YYYY-MM-DD"
-                value={studentData.dateOfBirth}
-                onChangeText={(text) => setStudentData({...studentData, dateOfBirth: text})}
-              />
+              <TouchableOpacity onPress={openDobPicker}>
+                <View style={[styles.modernInput, { justifyContent: 'center' }]}>
+                  <Text style={{ color: studentData.dateOfBirth ? '#212529' : '#6c757d' }}>
+                    {studentData.dateOfBirth || 'YYYY-MM-DD'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputGroup}>
@@ -365,6 +455,9 @@ const RegistrationScreen = ({ navigation }) => {
                 onChangeText={(text) => setStudentData({...studentData, email: text})}
                 autoCapitalize="none"
               />
+              {!!studentData.email && !isValidEmail(studentData.email) && (
+                <Text style={styles.validationText}>Enter a valid email address</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -375,6 +468,9 @@ const RegistrationScreen = ({ navigation }) => {
                 value={studentData.academicYear}
                 onChangeText={(text) => setStudentData({...studentData, academicYear: text})}
               />
+              {!!studentData.academicYear && !isValidAcademicYear(studentData.academicYear) && (
+                <Text style={styles.validationText}>Format must be YYYY-YYYY (consecutive years)</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -433,6 +529,66 @@ const RegistrationScreen = ({ navigation }) => {
           <Text style={styles.linkText}>Already have an account? Sign In</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* DOB Picker Modal */}
+      <Modal
+        visible={dobPickerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDobPickerOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>Select Date of Birth</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={{ marginBottom: 6, fontWeight: '600' }}>Year</Text>
+                <Picker
+                  selectedValue={dobYear}
+                  onValueChange={(v) => setDobYear(v)}
+                >
+                  {Array.from({ length: 80 }).map((_, idx) => {
+                    const y = new Date().getFullYear() - idx;
+                    return <Picker.Item key={y} label={String(y)} value={y} />;
+                  })}
+                </Picker>
+              </View>
+              <View style={{ width: 110, marginRight: 8 }}>
+                <Text style={{ marginBottom: 6, fontWeight: '600' }}>Month</Text>
+                <Picker
+                  selectedValue={dobMonth}
+                  onValueChange={(v) => setDobMonth(v)}
+                >
+                  {Array.from({ length: 12 }).map((_, idx) => {
+                    const m = idx + 1;
+                    return <Picker.Item key={m} label={pad2(m)} value={m} />;
+                  })}
+                </Picker>
+              </View>
+              <View style={{ width: 110 }}>
+                <Text style={{ marginBottom: 6, fontWeight: '600' }}>Day</Text>
+                <Picker
+                  selectedValue={dobDay}
+                  onValueChange={(v) => setDobDay(v)}
+                >
+                  {Array.from({ length: 31 }).map((_, idx) => {
+                    const d = idx + 1;
+                    return <Picker.Item key={d} label={pad2(d)} value={d} />;
+                  })}
+                </Picker>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+              <TouchableOpacity onPress={() => setDobPickerOpen(false)} style={{ padding: 12, marginRight: 8 }}>
+                <Text style={{ color: '#666', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmDobPicker} style={{ padding: 12 }}>
+                <Text style={{ color: '#1976D2', fontWeight: '700' }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -447,6 +603,11 @@ const LoginScreen = ({ navigation }) => {
   const handleTeacherLogin = async () => {
     if (!teacherData.uniqueId.trim() || !teacherData.password.trim()) {
       showError('Please fill all fields');
+      return;
+    }
+
+    if (!isValidPassword(teacherData.password)) {
+      showError('Password must be at least 8 characters long');
       return;
     }
 
@@ -509,6 +670,11 @@ const LoginScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1976D2" barStyle="light-content" />
       <View style={styles.loginHeader}>
+        <Image
+          source={require('./assets/sistc-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <Text style={styles.appTitle}>AttendancePro</Text>
         <Text style={styles.appSubtitle}>Smart Face Recognition System</Text>
       </View>
@@ -632,7 +798,7 @@ const LoginScreen = ({ navigation }) => {
         </TouchableOpacity>
         
         <View style={styles.footerContainer}>
-          <Text style={styles.footerText}>Powered by Face Recognition Technology</Text>
+          <Text style={styles.footerText}>Incorporation with Dr Mohammad Reza Jabbarpour</Text>
           <Text style={styles.versionText}>Version 2.0.0</Text>
         </View>
       </ScrollView>
@@ -895,6 +1061,19 @@ const CreateStudentScreen = ({ navigation }) => {
       return;
     }
 
+    if (studentData.email && !isValidEmail(studentData.email)) {
+      showError('Please enter a valid student email address');
+      return;
+    }
+    if (studentData.phoneNumber && !isValidPhone(studentData.phoneNumber)) {
+      showError('Please enter a valid phone number');
+      return;
+    }
+    if (studentData.academicYear && !isValidAcademicYear(studentData.academicYear)) {
+      showError('Academic Year must be in format YYYY-YYYY (consecutive years)');
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await apiCall('/admin/students', {
@@ -944,12 +1123,13 @@ const CreateStudentScreen = ({ navigation }) => {
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Date of Birth *</Text>
-            <TextInput
-              style={styles.modernInput}
-              placeholder="YYYY-MM-DD"
-              value={studentData.dateOfBirth}
-              onChangeText={(text) => setStudentData({...studentData, dateOfBirth: text})}
-            />
+            <TouchableOpacity onPress={openDobPicker}>
+              <View style={[styles.modernInput, { justifyContent: 'center' }]}>
+                <Text style={{ color: studentData.dateOfBirth ? '#212529' : '#6c757d' }}>
+                  {studentData.dateOfBirth || 'YYYY-MM-DD'}
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
@@ -962,6 +1142,9 @@ const CreateStudentScreen = ({ navigation }) => {
               onChangeText={(text) => setStudentData({...studentData, email: text})}
               autoCapitalize="none"
             />
+            {!!studentData.email && !isValidEmail(studentData.email) && (
+              <Text style={styles.validationText}>Enter a valid email address</Text>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -973,6 +1156,9 @@ const CreateStudentScreen = ({ navigation }) => {
               value={studentData.phoneNumber}
               onChangeText={(text) => setStudentData({...studentData, phoneNumber: text})}
             />
+            {!!studentData.phoneNumber && !isValidPhone(studentData.phoneNumber) && (
+              <Text style={styles.validationText}>Enter a valid phone number</Text>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -983,6 +1169,9 @@ const CreateStudentScreen = ({ navigation }) => {
               value={studentData.academicYear}
               onChangeText={(text) => setStudentData({...studentData, academicYear: text})}
             />
+            {!!studentData.academicYear && !isValidAcademicYear(studentData.academicYear) && (
+              <Text style={styles.validationText}>Format must be YYYY-YYYY (consecutive years)</Text>
+            )}
           </View>
 
           {courses.length > 0 && (
@@ -2850,6 +3039,20 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
+  logoImage: {
+    width: 160,
+    height: 160,
+    marginBottom: 16,
+    borderRadius: 80,
+    borderWidth: 3,
+    borderColor: '#fff',
+    backgroundColor: '#ffffff',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
   appTitle: {
     fontSize: 36,
     fontWeight: 'bold',
@@ -2864,6 +3067,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     letterSpacing: 0.5,
+  },
+  validationText: {
+    color: '#d32f2f',
+    marginTop: 6,
+    fontSize: 12,
   },
   loginContainer: {
     flexGrow: 1,
